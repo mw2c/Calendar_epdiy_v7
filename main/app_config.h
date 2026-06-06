@@ -1,0 +1,31 @@
+#pragma once
+
+#include <driver/gpio.h>
+#include <epdiy.h>
+
+#define DISPLAY_BOARD epd_board_epdiy2_s3
+#define DISPLAY_MODEL ED060KD1
+#define DISPLAY_VCOM_MV 1560
+
+#define SD_MOUNT_POINT "/sdcard"
+#define SD_DEFAULT_FONT_PATH "fonts/京華老宋体v3.0.ttf"
+#define SD_PIN_MISO GPIO_NUM_1
+#define SD_PIN_CLK GPIO_NUM_2
+#define SD_PIN_MOSI GPIO_NUM_38
+#define SD_PIN_CS GPIO_NUM_0
+#define SD_MAX_TRANSFER_SIZE 4000
+
+#define SD_TEXT_BUFFER_SIZE 4096
+#define SD_FIRST_TXT_PATH_SIZE 160
+#define SD_FONT_PATH_SIZE 192
+#define SD_FONT_NAME_SIZE 64
+#define SD_MAX_TREE_DEPTH 2
+#define SD_MAX_TREE_ENTRIES 36
+#define SD_MAX_TXT_BYTES 2300
+
+#define DISPLAY_MARGIN_X 28
+#define DISPLAY_MARGIN_Y 34
+#define DISPLAY_SD_FONT_POINT_SIZE 12
+#define DISPLAY_SD_FONT_DPI 300
+#define DISPLAY_SD_FONT_CACHE_BYTES (512 * 1024)
+#define DISPLAY_SD_FONT_TOTAL_CACHE_BYTES (1400 * 1024)

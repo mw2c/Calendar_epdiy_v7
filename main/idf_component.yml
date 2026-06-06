@@ -1,0 +1,2 @@
+dependencies:
+  espressif/freetype: "^2.13.3"
