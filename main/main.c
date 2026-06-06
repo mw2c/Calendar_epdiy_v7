@@ -8,6 +8,7 @@
 
 #include "app_config.h"
 #include "display_screen.h"
+#include "display_viewport.h"
 #include "display_font.h"
 #include "sd_content.h"
 
@@ -43,14 +44,19 @@ void app_main(void) {
     epd_init(&DISPLAY_BOARD, &DISPLAY_MODEL, EPD_LUT_64K);
     epd_set_vcom(DISPLAY_VCOM_MV);
     epd_set_rotation(EPD_ROT_PORTRAIT);
+    viewport_init();
 
     EpdiyHighlevelState hl = epd_hl_init(EPD_BUILTIN_WAVEFORM);
 
     ESP_LOGI(
         TAG,
-        "display initialized: %dx%d",
+        "display initialized: %dx%d, viewport: %dx%d at %d,%d",
         epd_rotated_display_width(),
-        epd_rotated_display_height()
+        epd_rotated_display_height(),
+        viewport_width(),
+        viewport_height(),
+        viewport_screen_x(0),
+        viewport_screen_y(0)
     );
 
     display_clear_screen();

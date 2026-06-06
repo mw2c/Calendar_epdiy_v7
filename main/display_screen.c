@@ -6,6 +6,7 @@
 #include <esp_log.h>
 
 #include "app_config.h"
+#include "display_viewport.h"
 #include "font_test_content.h"
 #include "text_utils.h"
 
@@ -45,7 +46,7 @@ static void draw_wrapped_line(
     int max_y
 ) {
     const int advance_y = font->advance_y;
-    const int max_width = epd_rotated_display_width() - (DISPLAY_MARGIN_X * 2);
+    const int max_width = viewport_width() - (DISPLAY_MARGIN_X * 2);
     char part[96];
     size_t part_len = 0;
     int current_width = 0;
@@ -66,11 +67,11 @@ static void draw_wrapped_line(
         int y1 = 0;
         int w = 0;
         int h = 0;
-        epd_get_text_bounds(font, tmp, &tx, &ty, &x1, &y1, &w, &h, props);
+        viewport_get_text_bounds(font, tmp, &tx, &ty, &x1, &y1, &w, &h, props);
 
         if (part_len > 0 && current_width + w > max_width) {
             int draw_x = x;
-            epd_write_string(font, part, &draw_x, cursor_y, fb, props);
+            viewport_write_string(font, part, &draw_x, cursor_y, fb, props);
             if (*cursor_y + advance_y > max_y) {
                 return;
             }
@@ -87,7 +88,7 @@ static void draw_wrapped_line(
 
     if (part_len > 0 && *cursor_y <= max_y) {
         int draw_x = x;
-        epd_write_string(font, part, &draw_x, cursor_y, fb, props);
+        viewport_write_string(font, part, &draw_x, cursor_y, fb, props);
     } else {
         *cursor_y += advance_y;
     }
@@ -103,7 +104,7 @@ static void draw_wrapped_line_ft(
     int max_y
 ) {
     const int advance_y = display_font_line_height(font);
-    const int max_width = epd_rotated_display_width() - (DISPLAY_MARGIN_X * 2);
+    const int max_width = viewport_width() - (DISPLAY_MARGIN_X * 2);
     char part[192];
     size_t part_len = 0;
     int current_width = 0;
@@ -135,7 +136,7 @@ static void draw_wrapped_line_ft(
         int w = display_font_text_width(font, tmp);
         if (part_len > 0 && current_width + w > max_width) {
             int draw_x = x;
-            display_font_draw_text(font, fb, part, &draw_x, cursor_y, props);
+            viewport_draw_text(font, fb, part, &draw_x, cursor_y, props);
             *cursor_y += advance_y;
             if (*cursor_y > max_y) {
                 return;
@@ -156,7 +157,7 @@ static void draw_wrapped_line_ft(
 
     if (part_len > 0 && *cursor_y <= max_y) {
         int draw_x = x;
-        display_font_draw_text(font, fb, part, &draw_x, cursor_y, props);
+        viewport_draw_text(font, fb, part, &draw_x, cursor_y, props);
         *cursor_y += advance_y;
     } else {
         *cursor_y += advance_y;
@@ -201,12 +202,12 @@ void display_draw_sd_screen(
     title_props.flags = EPD_DRAW_ALIGN_LEFT;
     int cursor_x = DISPLAY_MARGIN_X;
     int cursor_y = DISPLAY_MARGIN_Y + FiraSans_20.ascender;
-    epd_write_string(&FiraSans_20, "SD Card", &cursor_x, &cursor_y, fb, &title_props);
+    viewport_write_string(&FiraSans_20, "SD Card", &cursor_x, &cursor_y, fb, &title_props);
 
     if (body_font != NULL && body_font->active) {
         cursor_x = DISPLAY_MARGIN_X + 150;
         int font_y = DISPLAY_MARGIN_Y + FiraSans_12.ascender;
-        epd_write_string(&FiraSans_12, "Font", &cursor_x, &font_y, fb, &title_props);
+        viewport_write_string(&FiraSans_12, "Font", &cursor_x, &font_y, fb, &title_props);
     }
 
     EpdFontProperties body_props = epd_font_properties_default();
@@ -214,7 +215,7 @@ void display_draw_sd_screen(
     body_props.fallback_glyph = '?';
 
     cursor_y += 18;
-    const int max_y = epd_rotated_display_height() - DISPLAY_MARGIN_Y;
+    const int max_y = viewport_height() - DISPLAY_MARGIN_Y;
 
     draw_font_test_line(body_font, fb, &body_props, &cursor_y, max_y);
     if (body_font != NULL) {

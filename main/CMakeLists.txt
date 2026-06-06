@@ -10,6 +10,7 @@ idf_component_register(
     SRCS
         "main.c"
         "display_screen.c"
+        "display_viewport.c"
         "display_font.c"
         "sd_content.c"
         "text_utils.c"
