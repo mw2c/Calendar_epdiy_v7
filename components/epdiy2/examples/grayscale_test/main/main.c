@@ -18,12 +18,17 @@
 #ifdef CONFIG_IDF_TARGET_ESP32
 #define DEMO_BOARD epd_board_v6
 #elif defined(CONFIG_IDF_TARGET_ESP32S3)
-#define DEMO_BOARD epd_board_v7
+#define DEMO_BOARD epd_board_epdiy2_s3
 #endif
 
 #define WAVEFORM EPD_BUILTIN_WAVEFORM
 
 EpdiyHighlevelState hl;
+
+static void reset_back_buffer_to_white(void) {
+    size_t fb_size = (size_t)epd_width() / 2 * (size_t)epd_height();
+    memset(hl.back_fb, 0xFF, fb_size);
+}
 
 void write_grayscale_pattern(bool direction, uint8_t* fb) {
     int ep_width = epd_width();
@@ -53,6 +58,7 @@ void loop() {
 
     epd_poweron();
     epd_clear();
+    reset_back_buffer_to_white();
     enum EpdDrawError err = epd_hl_update_screen(&hl, MODE_GC16, temperature);
     epd_poweroff();
 
@@ -71,7 +77,7 @@ void loop() {
 }
 
 void IRAM_ATTR app_main() {
-    epd_init(&DEMO_BOARD, &ED097TC2, EPD_LUT_64K);
+    epd_init(&DEMO_BOARD, &ED060KD1, EPD_LUT_64K);
     epd_set_vcom(1560);
     hl = epd_hl_init(WAVEFORM);
 

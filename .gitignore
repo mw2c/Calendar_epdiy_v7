@@ -1,4 +1,5 @@
 build/
+build_esp32s3/
 .cache/
 .DS_Store
 sdkconfig

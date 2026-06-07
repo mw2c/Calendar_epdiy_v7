@@ -8,7 +8,7 @@
 #define DISPLAY_VCOM_MV 1560
 
 #define SD_MOUNT_POINT "/sdcard"
-#define SD_DEFAULT_FONT_PATH "fonts/京華老宋体v3.0.ttf"
+#define SD_DEFAULT_FONT_PATH "fonts/方正报宋.TTF"
 #define SD_PIN_MISO GPIO_NUM_1
 #define SD_PIN_CLK GPIO_NUM_2
 #define SD_PIN_MOSI GPIO_NUM_38

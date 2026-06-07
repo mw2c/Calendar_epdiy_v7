@@ -32,7 +32,7 @@
 #ifdef CONFIG_IDF_TARGET_ESP32
 #define DEMO_BOARD epd_board_v6
 #elif defined(CONFIG_IDF_TARGET_ESP32S3)
-#define DEMO_BOARD epd_board_v7
+#define DEMO_BOARD epd_board_epdiy2_s3
 #endif
 
 // Singular framebuffer to use for all of the tests.
@@ -188,12 +188,12 @@ void test_2ppB() {
 }
 
 void app_main() {
-    epd_init(&DEMO_BOARD, &ED060XC3, EPD_OPTIONS_DEFAULT);
+    epd_init(&DEMO_BOARD, &ED060KD1, EPD_OPTIONS_DEFAULT);
 
     // Set VCOM for boards that allow to set this in software (in mV).
     // This will print an error if unsupported. In this case,
     // set VCOM using the hardware potentiometer and delete this line.
-    epd_set_vcom(2100);
+    epd_set_vcom(1500);
 
     epd_set_lcd_pixel_clock_MHz(10);
 

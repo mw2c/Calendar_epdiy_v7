@@ -47,6 +47,7 @@ typedef struct {
 } EpdWaveform;
 
 extern const EpdWaveform epdiy_ED060SC4;
+extern const EpdWaveform epdiy_ED060KD1;
 extern const EpdWaveform epdiy_ED097OC4;
 extern const EpdWaveform epdiy_ED047TC1;
 extern const EpdWaveform epdiy_ED047TC2;

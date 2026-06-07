@@ -14,7 +14,7 @@ EpdiyHighlevelState hl;
 #ifdef CONFIG_IDF_TARGET_ESP32
 #define DEMO_BOARD epd_board_v6
 #elif defined(CONFIG_IDF_TARGET_ESP32S3)
-#define DEMO_BOARD epd_board_v7
+#define DEMO_BOARD epd_board_epdiy2_s3
 #endif
 
 void idf_loop() {
@@ -34,7 +34,7 @@ void idf_loop() {
 }
 
 void idf_setup() {
-    epd_init(&DEMO_BOARD, &ED097TC2, EPD_LUT_64K);
+    epd_init(&DEMO_BOARD, &ED060KD1, EPD_LUT_64K);
     epd_set_vcom(1560);
     hl = epd_hl_init(EPD_BUILTIN_WAVEFORM);
 }

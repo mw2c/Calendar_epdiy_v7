@@ -23,7 +23,7 @@ const EpdDisplay_t ED060KD1 = {
     .height = 1072,
     .bus_width = 8,
     .bus_speed = 20,
-    .default_waveform = &epdiy_ED060SCT,
+    .default_waveform = &epdiy_ED060KD1,
     .display_type = DISPLAY_TYPE_GENERIC,
 };
 
