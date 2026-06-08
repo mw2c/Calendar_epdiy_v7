@@ -17,6 +17,26 @@ idf.py build
 idf.py flash monitor
 ```
 
+## Hardware Notes
+
+The board has three resistor-ladder ADC buttons sharing one input:
+
+- Button ADC input: `GPIO19`
+- ESP32-S3 ADC mapping: `ADC2 channel 8`
+- Idle raw value: `4095`
+- Button raw values: `970`, `1993`, and `2775`
+
+Suggested initial thresholds:
+
+```text
+raw < 1400        button 3
+1400..2399        button 2
+2400..3399        button 1
+raw >= 3600       no button
+```
+
+`GPIO19` and `GPIO20` are also the ESP32-S3 native USB D-/D+ pins on many boards. This project has been using the UART/CH340 port for flashing and monitor, so keep that in mind before enabling native USB console/JTAG features.
+
 ## Layout
 
 - `main/`: application entry point and calendar code.

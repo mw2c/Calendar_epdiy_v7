@@ -7,6 +7,7 @@
 #include <epdiy.h>
 
 #include "app_config.h"
+#include "button_input.h"
 #include "display_screen.h"
 #include "display_viewport.h"
 #include "display_font.h"
@@ -15,6 +16,31 @@
 static const char *TAG = "calendar_epdiy_v7";
 static SdDisplayContent s_sd_content;
 static DisplayFont s_display_font;
+
+static void button_log_task(void *arg) {
+    (void)arg;
+
+    if (!button_input_init()) {
+        ESP_LOGE(TAG, "button input initialization failed");
+        vTaskDelete(NULL);
+        return;
+    }
+
+    ButtonInputKey last_key = BUTTON_INPUT_NONE;
+    while (true) {
+        int raw = 0;
+        ButtonInputKey key = button_input_poll(&raw);
+        if (key != last_key) {
+            if (key == BUTTON_INPUT_NONE) {
+                ESP_LOGI(TAG, "button released, raw=%d", raw);
+            } else {
+                ESP_LOGI(TAG, "%s pressed, raw=%d", button_input_key_name(key), raw);
+            }
+            last_key = key;
+        }
+        vTaskDelay(pdMS_TO_TICKS(ADC_BUTTON_POLL_INTERVAL_MS));
+    }
+}
 
 static bool load_sd_font(void) {
     if (!s_sd_content.font_found) {
@@ -41,6 +67,8 @@ static void unload_sd_font(void) {
 }
 
 void app_main(void) {
+    xTaskCreate(button_log_task, "button_log", 3072, NULL, 5, NULL);
+
     epd_init(&DISPLAY_BOARD, &DISPLAY_MODEL, EPD_LUT_64K);
     epd_set_vcom(DISPLAY_VCOM_MV);
     epd_set_rotation(EPD_ROT_PORTRAIT);
