@@ -9,3 +9,6 @@ dependencies.lock
 .vscode/
 *.pyc
 __pycache__/
+.superpowers/
+.worktrees/
+.playwright-cli/
