@@ -22,6 +22,7 @@
     drag: null,
     polygonDraft: null,
     nextLayerId: 1,
+    imageCache: new Map(),
     messageTimer: null,
   };
 
@@ -115,6 +116,13 @@
     return id;
   }
 
+  function getMaxLayerNumber() {
+    return state.project.layers.reduce(function (max, layer) {
+      var match = /^layer-(\d+)$/.exec(layer.id || "");
+      return match ? Math.max(max, Number.parseInt(match[1], 10)) : max;
+    }, 0);
+  }
+
   function addLayer(layer) {
     var id = createLayerId();
     var normalized = Object.assign(
@@ -136,6 +144,83 @@
     renderLayerList();
     updateLayerControls();
     return normalized;
+  }
+
+  function readFileAsDataURL(file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () {
+        resolve(String(reader.result || ""));
+      };
+      reader.onerror = function () {
+        reject(new Error("文件读取失败"));
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function loadImage(src) {
+    return new Promise(function (resolve, reject) {
+      var image = new Image();
+      image.onload = function () {
+        resolve(image);
+      };
+      image.onerror = function () {
+        reject(new Error("图片解码失败"));
+      };
+      image.src = src;
+    });
+  }
+
+  function createImageLayer(src, image, fileName) {
+    var maxWidth = state.project.canvas.width * 0.8;
+    var maxHeight = state.project.canvas.height * 0.8;
+    var ratio = Math.min(maxWidth / image.naturalWidth, maxHeight / image.naturalHeight, 1);
+    var width = Math.max(1, Math.round(image.naturalWidth * ratio));
+    var height = Math.max(1, Math.round(image.naturalHeight * ratio));
+
+    var layer = addLayer({
+      type: "image",
+      name: fileName || "导入图片",
+      src: src,
+      sourceWidth: image.naturalWidth,
+      sourceHeight: image.naturalHeight,
+      x: Math.round((state.project.canvas.width - width) / 2),
+      y: Math.round((state.project.canvas.height - height) / 2),
+      width: width,
+      height: height,
+      opacity: 1,
+    });
+    state.imageCache.set(layer.id, image);
+    renderProject();
+    return layer;
+  }
+
+  function handleImageImport(file) {
+    if (!file) {
+      return;
+    }
+
+    var accepted = ["image/svg+xml", "image/png", "image/jpeg"];
+    if (accepted.indexOf(file.type) === -1) {
+      showMessage("仅支持 SVG、PNG、JPG 图片", "error");
+      refs.imageInput.value = "";
+      return;
+    }
+
+    return readFileAsDataURL(file)
+      .then(function (src) {
+        return loadImage(src).then(function (image) {
+          createImageLayer(src, image, file.name);
+          showMessage("图片已导入");
+        });
+      })
+      .catch(function (error) {
+        showMessage(error.message, "error");
+      })
+      .finally(function () {
+        refs.imageInput.value = "";
+      });
   }
 
   function showMessage(text, kind) {
@@ -255,6 +340,13 @@
       }
     }
 
+    if (layer.type === "image") {
+      var image = state.imageCache.get(layer.id);
+      if (image) {
+        ctx.drawImage(image, layer.x, layer.y, layer.width, layer.height);
+      }
+    }
+
     ctx.restore();
   }
 
@@ -295,6 +387,285 @@
 
   function renderOverlay() {
     refs.overlayCtx.clearRect(0, 0, refs.overlayCanvas.width, refs.overlayCanvas.height);
+    var layer = getSelectedLayer();
+    if (layer) {
+      drawSelectionBox(refs.overlayCtx, layer);
+    }
+  }
+
+  function getLayerBounds(layer) {
+    return {
+      x: layer.x || 0,
+      y: layer.y || 0,
+      width: Math.max(1, layer.width || 1),
+      height: Math.max(1, layer.height || 1),
+    };
+  }
+
+  function drawSelectionBox(ctx, layer) {
+    var bounds = getLayerBounds(layer);
+    ctx.save();
+    ctx.strokeStyle = "#2563eb";
+    ctx.lineWidth = Math.max(1, 1 / state.zoom);
+    ctx.setLineDash([Math.max(4, 4 / state.zoom), Math.max(3, 3 / state.zoom)]);
+    ctx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
+    ctx.setLineDash([]);
+    drawResizeHandles(ctx, bounds);
+    ctx.restore();
+  }
+
+  function drawResizeHandles(ctx, bounds) {
+    var size = Math.max(8 / state.zoom, 4);
+    var half = size / 2;
+    var handles = getResizeHandles(bounds);
+    ctx.fillStyle = "#ffffff";
+    ctx.strokeStyle = "#1d4ed8";
+    ctx.lineWidth = Math.max(1, 1 / state.zoom);
+    Object.keys(handles).forEach(function (key) {
+      var handle = handles[key];
+      ctx.fillRect(handle.x - half, handle.y - half, size, size);
+      ctx.strokeRect(handle.x - half, handle.y - half, size, size);
+    });
+  }
+
+  function getResizeHandles(bounds) {
+    return {
+      nw: { x: bounds.x, y: bounds.y },
+      ne: { x: bounds.x + bounds.width, y: bounds.y },
+      sw: { x: bounds.x, y: bounds.y + bounds.height },
+      se: { x: bounds.x + bounds.width, y: bounds.y + bounds.height },
+    };
+  }
+
+  function canvasPointFromEvent(event) {
+    var rect = refs.overlayCanvas.getBoundingClientRect();
+    var x = ((event.clientX - rect.left) / rect.width) * refs.overlayCanvas.width;
+    var y = ((event.clientY - rect.top) / rect.height) * refs.overlayCanvas.height;
+    return { x: x, y: y };
+  }
+
+  function pointInBounds(point, bounds) {
+    return (
+      point.x >= bounds.x &&
+      point.x <= bounds.x + bounds.width &&
+      point.y >= bounds.y &&
+      point.y <= bounds.y + bounds.height
+    );
+  }
+
+  function distanceToSegment(point, a, b) {
+    var dx = b.x - a.x;
+    var dy = b.y - a.y;
+    if (dx === 0 && dy === 0) {
+      return Math.hypot(point.x - a.x, point.y - a.y);
+    }
+    var t = ((point.x - a.x) * dx + (point.y - a.y) * dy) / (dx * dx + dy * dy);
+    var clamped = clamp(t, 0, 1);
+    var x = a.x + clamped * dx;
+    var y = a.y + clamped * dy;
+    return Math.hypot(point.x - x, point.y - y);
+  }
+
+  function pointInPolygon(point, absolutePoints) {
+    var inside = false;
+    for (var i = 0, j = absolutePoints.length - 1; i < absolutePoints.length; j = i, i += 1) {
+      var pi = absolutePoints[i];
+      var pj = absolutePoints[j];
+      var intersects =
+        pi.y > point.y !== pj.y > point.y &&
+        point.x < ((pj.x - pi.x) * (point.y - pi.y)) / (pj.y - pi.y) + pi.x;
+      if (intersects) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  }
+
+  function absoluteLayerPoints(layer) {
+    return (layer.points || []).map(function (point) {
+      return {
+        x: layer.x + point.x,
+        y: layer.y + point.y,
+      };
+    });
+  }
+
+  function hitTestLayer(point) {
+    for (var i = state.project.layers.length - 1; i >= 0; i -= 1) {
+      var layer = state.project.layers[i];
+      if (layer.visible === false || layer.locked) {
+        continue;
+      }
+
+      var bounds = getLayerBounds(layer);
+      if (layer.type === "line" && layer.points && layer.points.length >= 2) {
+        var points = absoluteLayerPoints(layer);
+        if (distanceToSegment(point, points[0], points[1]) <= 8 / state.zoom) {
+          return layer;
+        }
+      } else if (layer.type === "polygon" && layer.points && layer.points.length >= 3) {
+        if (pointInPolygon(point, absoluteLayerPoints(layer)) || pointInBounds(point, bounds)) {
+          return layer;
+        }
+      } else if (pointInBounds(point, bounds)) {
+        return layer;
+      }
+    }
+    return null;
+  }
+
+  function hitTestResizeHandle(point, layer) {
+    if (!layer || layer.locked) {
+      return null;
+    }
+    var tolerance = Math.max(8 / state.zoom, 4);
+    var handles = getResizeHandles(getLayerBounds(layer));
+    var best = null;
+    var bestDistance = Infinity;
+    Object.keys(handles).forEach(function (key) {
+      var handle = handles[key];
+      if (Math.abs(point.x - handle.x) <= tolerance && Math.abs(point.y - handle.y) <= tolerance) {
+        var distance = Math.hypot(point.x - handle.x, point.y - handle.y);
+        if (distance < bestDistance) {
+          best = key;
+          bestDistance = distance;
+        }
+      }
+    });
+    return best;
+  }
+
+  function startMove(layer, point) {
+    state.drag = {
+      mode: "move",
+      layerId: layer.id,
+      start: point,
+      original: {
+        x: layer.x,
+        y: layer.y,
+      },
+    };
+  }
+
+  function startResize(layer, handle, point) {
+    state.drag = {
+      mode: "resize",
+      layerId: layer.id,
+      handle: handle,
+      start: point,
+      original: {
+        x: layer.x,
+        y: layer.y,
+        width: layer.width,
+        height: layer.height,
+      },
+    };
+  }
+
+  function updateDrag(point) {
+    if (!state.drag) {
+      return;
+    }
+    var layer = state.project.layers.find(function (item) {
+      return item.id === state.drag.layerId;
+    });
+    if (!layer || layer.locked) {
+      return;
+    }
+
+    var dx = point.x - state.drag.start.x;
+    var dy = point.y - state.drag.start.y;
+
+    if (state.drag.mode === "move") {
+      layer.x = Math.round(state.drag.original.x + dx);
+      layer.y = Math.round(state.drag.original.y + dy);
+    }
+
+    if (state.drag.mode === "resize") {
+      applyResize(layer, state.drag, dx, dy);
+    }
+
+    renderProject();
+    updateLayerControls();
+  }
+
+  function applyResize(layer, drag, dx, dy) {
+    var original = drag.original;
+    var left = original.x;
+    var top = original.y;
+    var right = original.x + original.width;
+    var bottom = original.y + original.height;
+
+    if (drag.handle.indexOf("w") !== -1) {
+      left = original.x + dx;
+    }
+    if (drag.handle.indexOf("e") !== -1) {
+      right = original.x + original.width + dx;
+    }
+    if (drag.handle.indexOf("n") !== -1) {
+      top = original.y + dy;
+    }
+    if (drag.handle.indexOf("s") !== -1) {
+      bottom = original.y + original.height + dy;
+    }
+
+    if (right < left) {
+      var swapX = right;
+      right = left;
+      left = swapX;
+    }
+    if (bottom < top) {
+      var swapY = bottom;
+      bottom = top;
+      top = swapY;
+    }
+
+    layer.x = Math.round(left);
+    layer.y = Math.round(top);
+    layer.width = Math.max(1, Math.round(right - left));
+    layer.height = Math.max(1, Math.round(bottom - top));
+  }
+
+  function handlePointerDown(event) {
+    var point = canvasPointFromEvent(event);
+    var selected = getSelectedLayer();
+    var handle = hitTestResizeHandle(point, selected);
+    if (handle) {
+      event.preventDefault();
+      startResize(selected, handle, point);
+      refs.overlayCanvas.setPointerCapture(event.pointerId);
+      return;
+    }
+
+    if (state.activeTool === "select") {
+      var layer = hitTestLayer(point);
+      selectLayer(layer ? layer.id : null);
+      if (layer && !layer.locked) {
+        event.preventDefault();
+        startMove(layer, point);
+        refs.overlayCanvas.setPointerCapture(event.pointerId);
+      }
+    }
+  }
+
+  function handlePointerMove(event) {
+    if (state.drag) {
+      event.preventDefault();
+      updateDrag(canvasPointFromEvent(event));
+    }
+  }
+
+  function handlePointerUp(event) {
+    if (state.drag) {
+      event.preventDefault();
+      state.drag = null;
+      renderProject();
+      renderLayerList();
+      updateLayerControls();
+      if (refs.overlayCanvas.hasPointerCapture(event.pointerId)) {
+        refs.overlayCanvas.releasePointerCapture(event.pointerId);
+      }
+    }
   }
 
   function updateCanvasStatus() {
@@ -543,6 +914,15 @@
   }
 
   function bindLayerEvents() {
+    refs.imageInput.addEventListener("change", function () {
+      handleImageImport(refs.imageInput.files && refs.imageInput.files[0]);
+    });
+
+    refs.overlayCanvas.addEventListener("pointerdown", handlePointerDown);
+    refs.overlayCanvas.addEventListener("pointermove", handlePointerMove);
+    refs.overlayCanvas.addEventListener("pointerup", handlePointerUp);
+    refs.overlayCanvas.addEventListener("pointercancel", handlePointerUp);
+
     refs.applyScreenSize.addEventListener("click", applyScreenSizeFromControls);
     refs.screenPreset.addEventListener("change", function () {
       var preset = SCREEN_PRESETS.find(function (item) {
@@ -629,6 +1009,9 @@
     addLayer: addLayer,
     selectLayer: selectLayer,
     setScreenSize: setScreenSize,
+    handleImageImport: handleImageImport,
+    hitTestLayer: hitTestLayer,
+    canvasPointFromEvent: canvasPointFromEvent,
   };
 
   document.addEventListener("DOMContentLoaded", init);
