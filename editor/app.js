@@ -254,6 +254,94 @@
     }, 1000);
   }
 
+  function exportFilename(extension) {
+    return "epd-image-" + state.project.canvas.width + "x" + state.project.canvas.height + "." + extension;
+  }
+
+  function packGray4bpp(width, height, pixels) {
+    var rowBytes = Math.ceil(width / 2);
+    var output = new Uint8Array(rowBytes * height);
+
+    for (var y = 0; y < height; y += 1) {
+      for (var x = 0; x < width; x += 2) {
+        var left = pixels[y * width + x] & 0x0f;
+        var right = x + 1 < width ? pixels[y * width + x + 1] & 0x0f : 0;
+        output[y * rowBytes + Math.floor(x / 2)] = (left << 4) | right;
+      }
+    }
+
+    return output;
+  }
+
+  function exportPacked(extension) {
+    var rendered = renderToGrayPixels();
+    var bytes = packGray4bpp(rendered.width, rendered.height, rendered.pixels);
+    downloadBlob(new Blob([bytes], { type: "application/octet-stream" }), exportFilename(extension));
+    showMessage("已导出 " + extension.toUpperCase() + "，尺寸 " + rendered.width + "x" + rendered.height);
+  }
+
+  function writeUint16LE(view, offset, value) {
+    view.setUint16(offset, value, true);
+  }
+
+  function writeUint32LE(view, offset, value) {
+    view.setUint32(offset, value, true);
+  }
+
+  function createGrayBmp(width, height, pixels) {
+    var fileHeaderSize = 14;
+    var infoHeaderSize = 40;
+    var paletteSize = 256 * 4;
+    var pixelOffset = fileHeaderSize + infoHeaderSize + paletteSize;
+    var rowStride = (width + 3) & ~3;
+    var pixelSize = rowStride * height;
+    var fileSize = pixelOffset + pixelSize;
+    var bytes = new Uint8Array(fileSize);
+    var view = new DataView(bytes.buffer);
+
+    bytes[0] = 0x42;
+    bytes[1] = 0x4d;
+    writeUint32LE(view, 2, fileSize);
+    writeUint32LE(view, 10, pixelOffset);
+
+    writeUint32LE(view, 14, infoHeaderSize);
+    writeUint32LE(view, 18, width);
+    writeUint32LE(view, 22, height);
+    writeUint16LE(view, 26, 1);
+    writeUint16LE(view, 28, 8);
+    writeUint32LE(view, 30, 0);
+    writeUint32LE(view, 34, pixelSize);
+    writeUint32LE(view, 38, 2835);
+    writeUint32LE(view, 42, 2835);
+    writeUint32LE(view, 46, 256);
+    writeUint32LE(view, 50, 256);
+
+    for (var i = 0; i < 256; i += 1) {
+      var paletteOffset = fileHeaderSize + infoHeaderSize + i * 4;
+      bytes[paletteOffset] = i;
+      bytes[paletteOffset + 1] = i;
+      bytes[paletteOffset + 2] = i;
+      bytes[paletteOffset + 3] = 0;
+    }
+
+    for (var y = 0; y < height; y += 1) {
+      var sourceY = height - 1 - y;
+      var rowOffset = pixelOffset + y * rowStride;
+      for (var x = 0; x < width; x += 1) {
+        bytes[rowOffset + x] = grayToByte(pixels[sourceY * width + x]);
+      }
+    }
+
+    return bytes;
+  }
+
+  function exportBmp() {
+    var rendered = renderToGrayPixels();
+    var bytes = createGrayBmp(rendered.width, rendered.height, rendered.pixels);
+    downloadBlob(new Blob([bytes], { type: "image/bmp" }), exportFilename("bmp"));
+    showMessage("已导出 BMP，尺寸 " + rendered.width + "x" + rendered.height);
+  }
+
   function saveProjectToFile() {
     var blob = new Blob([serializeProject()], { type: "application/json" });
     downloadBlob(blob, "epd-editor-project-" + timestampForFile() + ".json");
@@ -494,12 +582,16 @@
   }
 
   function grayToByte(gray) {
-    return clamp(Math.round(gray), 0, 15) * 17;
+    var numeric = Number(gray);
+    if (!Number.isFinite(numeric)) {
+      numeric = 15;
+    }
+    return clamp(Math.round(numeric), 0, 15) * 17;
   }
 
   function grayToCss(gray) {
     var byte = grayToByte(gray);
-    return "rgb(" + byte + " " + byte + " " + byte + ")";
+    return "rgb(" + byte + ", " + byte + ", " + byte + ")";
   }
 
   function renderProject() {
@@ -1447,6 +1539,14 @@
 
   function bindLayerEvents() {
     refs.saveProject.addEventListener("click", saveProjectToFile);
+    refs.exportBin.addEventListener("click", function () {
+      exportPacked("bin");
+    });
+    refs.exportRaw.addEventListener("click", function () {
+      exportPacked("raw");
+    });
+    refs.exportBmp.addEventListener("click", exportBmp);
+
     refs.importProject.addEventListener("click", function () {
       refs.projectInput.click();
     });
@@ -1574,6 +1674,10 @@
     handleProjectImport: handleProjectImport,
     serializeProject: serializeProject,
     loadProject: loadProject,
+    packGray4bpp: packGray4bpp,
+    createGrayBmp: createGrayBmp,
+    exportPacked: exportPacked,
+    exportBmp: exportBmp,
     hitTestLayer: hitTestLayer,
     canvasPointFromEvent: canvasPointFromEvent,
   };
