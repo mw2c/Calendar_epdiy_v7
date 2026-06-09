@@ -11,3 +11,4 @@ dependencies.lock
 __pycache__/
 .superpowers/
 .worktrees/
+.playwright-cli/

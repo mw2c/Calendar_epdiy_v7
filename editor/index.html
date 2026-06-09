@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EPD 16 灰阶图片编辑器</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%23fff'/%3E%3Cpath d='M6 8h20v16H6z' fill='%23d1d5db' stroke='%231f2933' stroke-width='2'/%3E%3Cpath d='M10 12h12v2H10zm0 4h8v2h-8z' fill='%231f2933'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="app-header">
+      <div>
+        <h1>EPD 16 灰阶图片编辑器</h1>
+        <p>所见即所得电子纸画布</p>
+      </div>
+      <div class="header-actions">
+        <button id="saveProject" type="button">保存项目</button>
+        <button id="importProject" type="button">导入项目</button>
+        <span class="divider"></span>
+        <button id="exportBin" type="button">导出 BIN</button>
+        <button id="exportRaw" type="button">导出 RAW</button>
+        <button id="exportBmp" type="button">导出 BMP</button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="sidebar left-sidebar" aria-label="工具">
+        <section class="panel">
+          <h2>屏幕</h2>
+          <label class="field">
+            <span>预设</span>
+            <select id="screenPreset">
+              <option value="ed060kd1-portrait">ED060KD1 portrait</option>
+              <option value="custom">自定义</option>
+            </select>
+          </label>
+          <div class="field-grid">
+            <label class="field">
+              <span>宽</span>
+              <input id="canvasWidth" type="number" min="1" max="4096" value="1072">
+            </label>
+            <label class="field">
+              <span>高</span>
+              <input id="canvasHeight" type="number" min="1" max="4096" value="1448">
+            </label>
+          </div>
+          <button id="applyScreenSize" type="button" class="full-width">应用尺寸</button>
+        </section>
+
+        <section class="panel">
+          <h2>导入</h2>
+          <label class="file-button" for="imageInput">导入 SVG/PNG/JPG</label>
+          <input id="imageInput" type="file" accept="image/svg+xml,image/png,image/jpeg" hidden>
+        </section>
+
+        <section class="panel">
+          <h2>工具</h2>
+          <div class="tool-grid" role="toolbar" aria-label="绘制工具">
+            <button id="toolSelect" type="button" data-tool="select">选择</button>
+            <button id="toolRect" type="button" data-tool="rect">矩形</button>
+            <button id="toolEllipse" type="button" data-tool="ellipse">圆</button>
+            <button id="toolLine" type="button" data-tool="line">直线</button>
+            <button id="toolPolygon" type="button" data-tool="polygon">多边形</button>
+          </div>
+          <button id="finishPolygon" type="button" class="full-width" disabled>结束多边形</button>
+        </section>
+
+        <section class="panel note-panel">
+          <h2>灰阶</h2>
+          <p>0 为黑，15 为白。导出 BIN/RAW 使用 4bpp 打包。</p>
+        </section>
+      </aside>
+
+      <section class="canvas-column" aria-label="画布">
+        <div class="canvas-toolbar">
+          <button id="zoomOut" type="button">-</button>
+          <span id="zoomLevel">100%</span>
+          <button id="zoomIn" type="button">+</button>
+          <button id="fitCanvas" type="button">适应</button>
+          <span id="canvasStatus">1072 x 1448 · 16 灰阶</span>
+        </div>
+        <div class="canvas-viewport" id="canvasViewport">
+          <div class="canvas-stack" id="canvasStack">
+            <canvas id="displayCanvas" width="1072" height="1448"></canvas>
+            <canvas id="overlayCanvas" width="1072" height="1448"></canvas>
+          </div>
+        </div>
+        <div id="message" class="message" role="status" aria-live="polite"></div>
+      </section>
+
+      <aside class="sidebar right-sidebar" aria-label="属性与图层">
+        <section class="panel properties-panel">
+          <h2>属性</h2>
+          <p id="noSelection" class="empty-state">未选择元素</p>
+          <div id="selectedPanel" class="selected-panel" hidden>
+            <label class="field">
+              <span>名称</span>
+              <input id="layerName" type="text">
+            </label>
+            <div class="field-grid">
+              <label class="field">
+                <span>X</span>
+                <input id="propX" type="number">
+              </label>
+              <label class="field">
+                <span>Y</span>
+                <input id="propY" type="number">
+              </label>
+              <label class="field">
+                <span>宽</span>
+                <input id="propWidth" type="number" min="1">
+              </label>
+              <label class="field">
+                <span>高</span>
+                <input id="propHeight" type="number" min="1">
+              </label>
+            </div>
+            <div class="field-grid">
+              <label class="field">
+                <span>填充</span>
+                <input id="fillGray" type="number" min="0" max="15">
+              </label>
+              <label class="field">
+                <span>描边</span>
+                <input id="strokeGray" type="number" min="0" max="15">
+              </label>
+              <label class="field">
+                <span>线宽</span>
+                <input id="strokeWidth" type="number" min="0">
+              </label>
+              <label class="field">
+                <span>透明度</span>
+                <input id="opacity" type="number" min="0" max="1" step="0.05">
+              </label>
+            </div>
+            <div class="button-row">
+              <button id="moveLayerUp" type="button">上移</button>
+              <button id="moveLayerDown" type="button">下移</button>
+              <button id="deleteLayer" type="button" class="danger">删除</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel layers-panel">
+          <h2>图层</h2>
+          <div id="layerList" class="layer-list"></div>
+        </section>
+      </aside>
+    </main>
+
+    <input id="projectInput" type="file" accept="application/json,.json" hidden>
+  </div>
+</body>
+</html>
