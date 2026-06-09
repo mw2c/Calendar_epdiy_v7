@@ -159,6 +159,19 @@
     });
   }
 
+  function readFileAsText(file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () {
+        resolve(String(reader.result || ""));
+      };
+      reader.onerror = function () {
+        reject(new Error("文件读取失败"));
+      };
+      reader.readAsText(file);
+    });
+  }
+
   function loadImage(src) {
     return new Promise(function (resolve, reject) {
       var image = new Image();
@@ -194,6 +207,209 @@
     state.imageCache.set(layer.id, image);
     renderProject();
     return layer;
+  }
+
+  function serializeProject() {
+    var serializable = {
+      version: state.project.version,
+      screenPreset: state.project.screenPreset,
+      canvas: {
+        width: state.project.canvas.width,
+        height: state.project.canvas.height,
+      },
+      layers: state.project.layers.map(function (layer) {
+        return JSON.parse(JSON.stringify(layer));
+      }),
+    };
+    return JSON.stringify(serializable, null, 2);
+  }
+
+  function pad2(value) {
+    return String(value).padStart(2, "0");
+  }
+
+  function timestampForFile() {
+    var date = new Date();
+    return (
+      date.getFullYear() +
+      pad2(date.getMonth() + 1) +
+      pad2(date.getDate()) +
+      "-" +
+      pad2(date.getHours()) +
+      pad2(date.getMinutes()) +
+      pad2(date.getSeconds())
+    );
+  }
+
+  function downloadBlob(blob, filename) {
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(function () {
+      URL.revokeObjectURL(url);
+    }, 1000);
+  }
+
+  function saveProjectToFile() {
+    var blob = new Blob([serializeProject()], { type: "application/json" });
+    downloadBlob(blob, "epd-editor-project-" + timestampForFile() + ".json");
+    showMessage("项目已保存");
+  }
+
+  function parseProjectJson(text) {
+    try {
+      return JSON.parse(text);
+    } catch (error) {
+      throw new Error("项目 JSON 解析失败");
+    }
+  }
+
+  function assertNumber(value, name) {
+    if (!Number.isFinite(value)) {
+      throw new Error(name + " 必须是数字");
+    }
+  }
+
+  function validateLayer(layer, index) {
+    var prefix = "图层 " + (index + 1);
+    var validTypes = ["image", "rect", "ellipse", "line", "polygon"];
+    if (!layer || typeof layer !== "object") {
+      throw new Error(prefix + " 格式无效");
+    }
+    if (validTypes.indexOf(layer.type) === -1) {
+      throw new Error(prefix + " 类型不支持");
+    }
+    if (typeof layer.id !== "string" || !layer.id) {
+      throw new Error(prefix + " 缺少 id");
+    }
+    if (typeof layer.name !== "string") {
+      layer.name = layerTypeLabel(layer.type);
+    }
+    ["x", "y", "width", "height"].forEach(function (key) {
+      assertNumber(layer[key], prefix + "." + key);
+    });
+    layer.width = Math.max(1, Math.round(layer.width));
+    layer.height = Math.max(1, Math.round(layer.height));
+    layer.x = Math.round(layer.x);
+    layer.y = Math.round(layer.y);
+    layer.visible = layer.visible !== false;
+    layer.locked = layer.locked === true;
+
+    if (layer.type === "image") {
+      if (typeof layer.src !== "string" || !layer.src) {
+        throw new Error(prefix + " 缺少图片数据");
+      }
+      layer.opacity = Number.isFinite(layer.opacity) ? clamp(layer.opacity, 0, 1) : 1;
+      layer.sourceWidth = Math.max(1, Math.round(layer.sourceWidth || layer.width));
+      layer.sourceHeight = Math.max(1, Math.round(layer.sourceHeight || layer.height));
+      return;
+    }
+
+    layer.strokeGray = clampInt(layer.strokeGray, 0, 15);
+    layer.strokeWidth = clampInt(layer.strokeWidth, 0, 512);
+    if (layer.type !== "line") {
+      layer.fillGray = clampInt(layer.fillGray, 0, 15);
+    }
+    if (layer.type === "line" || layer.type === "polygon") {
+      if (!Array.isArray(layer.points) || layer.points.length < (layer.type === "line" ? 2 : 3)) {
+        throw new Error(prefix + " 点数据无效");
+      }
+      layer.points = layer.points.map(function (point) {
+        assertNumber(point.x, prefix + ".point.x");
+        assertNumber(point.y, prefix + ".point.y");
+        return {
+          x: Math.round(point.x),
+          y: Math.round(point.y),
+        };
+      });
+    }
+  }
+
+  function validateProject(project) {
+    if (!project || typeof project !== "object") {
+      throw new Error("项目格式无效");
+    }
+    if (project.version !== 1) {
+      throw new Error("不支持的项目版本");
+    }
+    if (!project.canvas || typeof project.canvas !== "object") {
+      throw new Error("项目缺少画布信息");
+    }
+    var canvas = validateCanvasSize(project.canvas.width, project.canvas.height);
+    if (!canvas.ok) {
+      throw new Error(canvas.message);
+    }
+    if (!Array.isArray(project.layers)) {
+      throw new Error("项目缺少图层列表");
+    }
+
+    var clone = JSON.parse(JSON.stringify(project));
+    clone.version = 1;
+    clone.screenPreset = typeof clone.screenPreset === "string" ? clone.screenPreset : "custom";
+    clone.canvas = {
+      width: canvas.width,
+      height: canvas.height,
+    };
+    clone.layers.forEach(validateLayer);
+    return clone;
+  }
+
+  function rebuildImageCache(project) {
+    var nextCache = new Map();
+    var imageLayers = project.layers.filter(function (layer) {
+      return layer.type === "image";
+    });
+
+    return Promise.all(
+      imageLayers.map(function (layer) {
+        return loadImage(layer.src).then(function (image) {
+          nextCache.set(layer.id, image);
+        });
+      })
+    ).then(function () {
+      return nextCache;
+    });
+  }
+
+  function loadProject(project) {
+    var validated = validateProject(project);
+    return rebuildImageCache(validated).then(function (nextCache) {
+      state.project = validated;
+      state.imageCache = nextCache;
+      state.selectedId = null;
+      state.drag = null;
+      state.polygonDraft = null;
+      state.nextLayerId = getMaxLayerNumber() + 1;
+      resizeCanvases(validated.canvas.width, validated.canvas.height);
+      updateScreenControls();
+      fitCanvasToViewport();
+      renderProject();
+      renderLayerList();
+      updateLayerControls();
+      updateToolButtons();
+      showMessage("项目已导入");
+    });
+  }
+
+  function handleProjectImport(file) {
+    if (!file) {
+      return Promise.resolve();
+    }
+
+    return readFileAsText(file)
+      .then(parseProjectJson)
+      .then(loadProject)
+      .catch(function (error) {
+        showMessage(error.message, "error");
+        throw error;
+      })
+      .finally(function () {
+        refs.projectInput.value = "";
+      });
   }
 
   function handleImageImport(file) {
@@ -1230,6 +1446,14 @@
   }
 
   function bindLayerEvents() {
+    refs.saveProject.addEventListener("click", saveProjectToFile);
+    refs.importProject.addEventListener("click", function () {
+      refs.projectInput.click();
+    });
+    refs.projectInput.addEventListener("change", function () {
+      handleProjectImport(refs.projectInput.files && refs.projectInput.files[0]).catch(function () {});
+    });
+
     refs.imageInput.addEventListener("change", function () {
       handleImageImport(refs.imageInput.files && refs.imageInput.files[0]);
     });
@@ -1347,6 +1571,9 @@
     selectLayer: selectLayer,
     setScreenSize: setScreenSize,
     handleImageImport: handleImageImport,
+    handleProjectImport: handleProjectImport,
+    serializeProject: serializeProject,
+    loadProject: loadProject,
     hitTestLayer: hitTestLayer,
     canvasPointFromEvent: canvasPointFromEvent,
   };
