@@ -340,6 +340,58 @@
       }
     }
 
+    if (layer.type === "ellipse") {
+      ctx.fillStyle = grayToCss(layer.fillGray);
+      ctx.strokeStyle = grayToCss(layer.strokeGray);
+      ctx.lineWidth = Math.max(0, layer.strokeWidth || 0);
+      ctx.beginPath();
+      ctx.ellipse(
+        layer.x + layer.width / 2,
+        layer.y + layer.height / 2,
+        Math.abs(layer.width / 2),
+        Math.abs(layer.height / 2),
+        0,
+        0,
+        Math.PI * 2
+      );
+      ctx.fill();
+      if (ctx.lineWidth > 0) {
+        ctx.stroke();
+      }
+    }
+
+    if (layer.type === "line") {
+      var linePoints = absoluteLayerPoints(layer);
+      if (linePoints.length >= 2) {
+        ctx.strokeStyle = grayToCss(layer.strokeGray);
+        ctx.lineWidth = Math.max(1, layer.strokeWidth || 1);
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(linePoints[0].x, linePoints[0].y);
+        ctx.lineTo(linePoints[1].x, linePoints[1].y);
+        ctx.stroke();
+      }
+    }
+
+    if (layer.type === "polygon") {
+      var polygonPoints = absoluteLayerPoints(layer);
+      if (polygonPoints.length >= 3) {
+        ctx.fillStyle = grayToCss(layer.fillGray);
+        ctx.strokeStyle = grayToCss(layer.strokeGray);
+        ctx.lineWidth = Math.max(0, layer.strokeWidth || 0);
+        ctx.beginPath();
+        ctx.moveTo(polygonPoints[0].x, polygonPoints[0].y);
+        polygonPoints.slice(1).forEach(function (point) {
+          ctx.lineTo(point.x, point.y);
+        });
+        ctx.closePath();
+        ctx.fill();
+        if (ctx.lineWidth > 0) {
+          ctx.stroke();
+        }
+      }
+    }
+
     if (layer.type === "image") {
       var image = state.imageCache.get(layer.id);
       if (image) {
@@ -387,9 +439,49 @@
 
   function renderOverlay() {
     refs.overlayCtx.clearRect(0, 0, refs.overlayCanvas.width, refs.overlayCanvas.height);
+    drawDraftOverlay(refs.overlayCtx);
     var layer = getSelectedLayer();
     if (layer) {
       drawSelectionBox(refs.overlayCtx, layer);
+    }
+  }
+
+  function drawDraftOverlay(ctx) {
+    if (state.drag && state.drag.mode === "draw" && state.drag.draftLayer) {
+      ctx.save();
+      ctx.globalAlpha = 0.8;
+      drawLayer(ctx, state.drag.draftLayer);
+      ctx.restore();
+    }
+
+    if (state.polygonDraft && state.polygonDraft.points.length) {
+      var points = state.polygonDraft.points.slice();
+      if (state.polygonDraft.preview) {
+        points.push(state.polygonDraft.preview);
+      }
+      ctx.save();
+      ctx.strokeStyle = "#1d4ed8";
+      ctx.fillStyle = "rgba(37, 99, 235, 0.12)";
+      ctx.lineWidth = Math.max(1, 1 / state.zoom);
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      points.slice(1).forEach(function (point) {
+        ctx.lineTo(point.x, point.y);
+      });
+      if (state.polygonDraft.points.length >= 3 && !state.polygonDraft.preview) {
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.stroke();
+      points.forEach(function (point) {
+        var radius = Math.max(3 / state.zoom, 2);
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+        ctx.fillStyle = "#ffffff";
+        ctx.fill();
+        ctx.stroke();
+      });
+      ctx.restore();
     }
   }
 
@@ -558,7 +650,19 @@
         y: layer.y,
         width: layer.width,
         height: layer.height,
+        points: layer.points ? layer.points.map(function (item) {
+          return { x: item.x, y: item.y };
+        }) : null,
       },
+    };
+  }
+
+  function startDraw(tool, point) {
+    state.drag = {
+      mode: "draw",
+      tool: tool,
+      start: point,
+      draftLayer: null,
     };
   }
 
@@ -566,6 +670,12 @@
     if (!state.drag) {
       return;
     }
+    if (state.drag.mode === "draw") {
+      state.drag.draftLayer = createShapeLayerFromDrag(state.drag.tool, state.drag.start, point);
+      renderProject();
+      return;
+    }
+
     var layer = state.project.layers.find(function (item) {
       return item.id === state.drag.layerId;
     });
@@ -624,10 +734,205 @@
     layer.y = Math.round(top);
     layer.width = Math.max(1, Math.round(right - left));
     layer.height = Math.max(1, Math.round(bottom - top));
+
+    if (drag.original.points && drag.original.width && drag.original.height) {
+      var scaleX = layer.width / drag.original.width;
+      var scaleY = layer.height / drag.original.height;
+      layer.points = drag.original.points.map(function (point) {
+        return {
+          x: Math.round(point.x * scaleX),
+          y: Math.round(point.y * scaleY),
+        };
+      });
+    }
+  }
+
+  function normalizeDragBounds(start, point) {
+    var x = Math.min(start.x, point.x);
+    var y = Math.min(start.y, point.y);
+    var width = Math.abs(point.x - start.x);
+    var height = Math.abs(point.y - start.y);
+    return {
+      x: Math.round(x),
+      y: Math.round(y),
+      width: Math.max(1, Math.round(width)),
+      height: Math.max(1, Math.round(height)),
+    };
+  }
+
+  function createShapeLayerFromDrag(tool, start, point) {
+    if (tool === "line") {
+      return createLineLayer(start, point);
+    }
+
+    var bounds = normalizeDragBounds(start, point);
+    return Object.assign(
+      {
+        type: tool,
+        name: nextLayerName(tool),
+        visible: true,
+        locked: false,
+        fillGray: 15,
+        strokeGray: 0,
+        strokeWidth: 2,
+      },
+      bounds
+    );
+  }
+
+  function createLineLayer(start, point) {
+    var bounds = normalizeDragBounds(start, point);
+    var startPoint = {
+      x: Math.round(start.x - bounds.x),
+      y: Math.round(start.y - bounds.y),
+    };
+    var endPoint = {
+      x: Math.round(point.x - bounds.x),
+      y: Math.round(point.y - bounds.y),
+    };
+    return Object.assign(
+      {
+        type: "line",
+        name: nextLayerName("line"),
+        visible: true,
+        locked: false,
+        fillGray: null,
+        strokeGray: 0,
+        strokeWidth: 2,
+        points: [startPoint, endPoint],
+      },
+      bounds
+    );
+  }
+
+  function commitDraftLayer() {
+    if (!state.drag || state.drag.mode !== "draw" || !state.drag.draftLayer) {
+      state.drag = null;
+      renderProject();
+      return;
+    }
+
+    var layer = state.drag.draftLayer;
+    state.drag = null;
+    if (layer.type === "line") {
+      var points = absoluteLayerPoints(layer);
+      if (points.length >= 2 && distanceToSegment(points[0], points[0], points[1]) >= 0) {
+        if (Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y) < 2) {
+          renderProject();
+          return;
+        }
+      }
+    } else if (layer.width < 2 || layer.height < 2) {
+      renderProject();
+      return;
+    }
+
+    addLayer(layer);
+    setActiveTool("select");
+  }
+
+  function normalizePolygon(points) {
+    var xs = points.map(function (point) { return point.x; });
+    var ys = points.map(function (point) { return point.y; });
+    var minX = Math.min.apply(Math, xs);
+    var minY = Math.min.apply(Math, ys);
+    var maxX = Math.max.apply(Math, xs);
+    var maxY = Math.max.apply(Math, ys);
+
+    return {
+      x: Math.round(minX),
+      y: Math.round(minY),
+      width: Math.max(1, Math.round(maxX - minX)),
+      height: Math.max(1, Math.round(maxY - minY)),
+      points: points.map(function (point) {
+        return {
+          x: Math.round(point.x - minX),
+          y: Math.round(point.y - minY),
+        };
+      }),
+    };
+  }
+
+  function finishPolygon(commit) {
+    if (!state.polygonDraft) {
+      return;
+    }
+
+    var draft = state.polygonDraft;
+    state.polygonDraft = null;
+    refs.finishPolygon.disabled = true;
+
+    if (commit !== false && draft.points.length >= 3) {
+      addLayer(
+        Object.assign(
+          {
+            type: "polygon",
+            name: nextLayerName("polygon"),
+            visible: true,
+            locked: false,
+            fillGray: 15,
+            strokeGray: 0,
+            strokeWidth: 2,
+          },
+          normalizePolygon(draft.points)
+        )
+      );
+    } else {
+      renderProject();
+    }
+    setActiveTool("select");
+  }
+
+  function nextLayerName(type) {
+    var base = layerTypeLabel(type);
+    var count = state.project.layers.filter(function (layer) {
+      return layer.type === type;
+    }).length;
+    return base + " " + (count + 1);
+  }
+
+  function setActiveTool(tool) {
+    if (state.activeTool === "polygon" && tool !== "polygon" && state.polygonDraft) {
+      finishPolygon(false);
+    }
+    state.activeTool = tool;
+    updateToolButtons();
+    refs.overlayCanvas.style.cursor = tool === "select" ? "default" : "crosshair";
+  }
+
+  function updateToolButtons() {
+    [
+      refs.toolSelect,
+      refs.toolRect,
+      refs.toolEllipse,
+      refs.toolLine,
+      refs.toolPolygon,
+    ].forEach(function (button) {
+      button.classList.toggle("active", button.dataset.tool === state.activeTool);
+    });
+    refs.finishPolygon.disabled = !state.polygonDraft || state.polygonDraft.points.length < 3;
   }
 
   function handlePointerDown(event) {
     var point = canvasPointFromEvent(event);
+    if (state.activeTool === "polygon") {
+      event.preventDefault();
+      if (!state.polygonDraft) {
+        state.polygonDraft = { points: [], preview: null };
+      }
+      state.polygonDraft.points.push({ x: Math.round(point.x), y: Math.round(point.y) });
+      refs.finishPolygon.disabled = state.polygonDraft.points.length < 3;
+      renderOverlay();
+      return;
+    }
+
+    if (state.activeTool === "rect" || state.activeTool === "ellipse" || state.activeTool === "line") {
+      event.preventDefault();
+      startDraw(state.activeTool, point);
+      refs.overlayCanvas.setPointerCapture(event.pointerId);
+      return;
+    }
+
     var selected = getSelectedLayer();
     var handle = hitTestResizeHandle(point, selected);
     if (handle) {
@@ -649,6 +954,12 @@
   }
 
   function handlePointerMove(event) {
+    if (state.activeTool === "polygon" && state.polygonDraft) {
+      state.polygonDraft.preview = canvasPointFromEvent(event);
+      renderOverlay();
+      return;
+    }
+
     if (state.drag) {
       event.preventDefault();
       updateDrag(canvasPointFromEvent(event));
@@ -658,10 +969,15 @@
   function handlePointerUp(event) {
     if (state.drag) {
       event.preventDefault();
-      state.drag = null;
-      renderProject();
-      renderLayerList();
-      updateLayerControls();
+      var drag = state.drag;
+      if (drag.mode === "draw") {
+        commitDraftLayer();
+      } else {
+        state.drag = null;
+        renderProject();
+        renderLayerList();
+        updateLayerControls();
+      }
       if (refs.overlayCanvas.hasPointerCapture(event.pointerId)) {
         refs.overlayCanvas.releasePointerCapture(event.pointerId);
       }
@@ -922,6 +1238,26 @@
     refs.overlayCanvas.addEventListener("pointermove", handlePointerMove);
     refs.overlayCanvas.addEventListener("pointerup", handlePointerUp);
     refs.overlayCanvas.addEventListener("pointercancel", handlePointerUp);
+    refs.overlayCanvas.addEventListener("dblclick", function () {
+      if (state.activeTool === "polygon") {
+        finishPolygon(true);
+      }
+    });
+
+    [
+      refs.toolSelect,
+      refs.toolRect,
+      refs.toolEllipse,
+      refs.toolLine,
+      refs.toolPolygon,
+    ].forEach(function (button) {
+      button.addEventListener("click", function () {
+        setActiveTool(button.dataset.tool);
+      });
+    });
+    refs.finishPolygon.addEventListener("click", function () {
+      finishPolygon(true);
+    });
 
     refs.applyScreenSize.addEventListener("click", applyScreenSizeFromControls);
     refs.screenPreset.addEventListener("change", function () {
@@ -995,6 +1331,7 @@
     updateScreenControls();
     renderLayerList();
     updateLayerControls();
+    updateToolButtons();
     fitCanvasToViewport();
     renderProject();
   }
