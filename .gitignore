@@ -11,3 +11,7 @@ dependencies.lock
 __pycache__/
 .superpowers/
 .worktrees/
+harness/build/
+harness/out/
+harness/assets/sdcard/fonts/*
+!harness/assets/sdcard/fonts/.gitkeep
