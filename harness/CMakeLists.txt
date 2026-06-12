@@ -13,6 +13,7 @@ enable_testing()
 add_executable(harness_tests
     tests/harness_tests.c
     src/png_writer.c
+    src/epd_stub.c
 )
 target_include_directories(harness_tests PRIVATE
     src

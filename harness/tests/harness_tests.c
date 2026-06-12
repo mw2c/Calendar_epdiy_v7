@@ -6,6 +6,7 @@
 #include <epdiy.h>
 
 #include "app_config.h"
+#include "epd_stub.h"
 #include "png_writer.h"
 
 static int failures = 0;
@@ -17,6 +18,63 @@ static int failures = 0;
             failures++;                                                      \
         }                                                                    \
     } while (0)
+
+static uint8_t *alloc_white_fb(void) {
+    size_t size = (size_t)(epd_width() / 2) * (size_t)epd_height();
+    uint8_t *fb = malloc(size);
+    CHECK(fb != NULL);
+    if (fb != NULL) {
+        memset(fb, 0xFF, size);
+    }
+    return fb;
+}
+
+static size_t count_ink_nibbles(const uint8_t *fb) {
+    size_t size = (size_t)(epd_width() / 2) * (size_t)epd_height();
+    size_t ink = 0;
+    for (size_t i = 0; i < size; i++) {
+        if ((fb[i] & 0x0F) != 0x0F) {
+            ink++;
+        }
+        if ((fb[i] & 0xF0) != 0xF0) {
+            ink++;
+        }
+    }
+    return ink;
+}
+
+static void test_display_geometry(void) {
+    CHECK(epd_width() == 1448);
+    CHECK(epd_height() == 1072);
+    CHECK(epd_rotated_display_width() == 1072);
+    CHECK(epd_rotated_display_height() == 1448);
+}
+
+static void test_portrait_pixel_mapping(void) {
+    uint8_t *fb = alloc_white_fb();
+    if (fb == NULL) {
+        return;
+    }
+    // App-space (0,0) under EPD_ROT_PORTRAIT maps to native (1447, 0):
+    // byte 1447/2 = 723, odd native x = high nibble.
+    epd_draw_pixel(0, 0, 0x00, fb);
+    CHECK(fb[723] == 0x0F);
+    // App-space (1,0) maps to native (1447, 1): row stride 724.
+    epd_draw_pixel(1, 0, 0x00, fb);
+    CHECK(fb[724 + 723] == 0x0F);
+    free(fb);
+}
+
+static void test_fill_rect_ink_count(void) {
+    uint8_t *fb = alloc_white_fb();
+    if (fb == NULL) {
+        return;
+    }
+    EpdRect r = { .x = 10, .y = 20, .width = 3, .height = 2 };
+    epd_fill_rect(r, 0x00, fb);
+    CHECK(count_ink_nibbles(fb) == 6);
+    free(fb);
+}
 
 static void test_png_writer_roundtrip(void) {
     const char *path = "harness_test_out.png";
@@ -44,6 +102,12 @@ static void test_png_writer_roundtrip(void) {
 int main(void) {
     CHECK(DISPLAY_VCOM_MV == 1560);
 
+    epd_init(&epd_board_epdiy2_s3, &ED060KD1, EPD_LUT_64K);
+    epd_set_rotation(EPD_ROT_PORTRAIT);
+
+    test_display_geometry();
+    test_portrait_pixel_mapping();
+    test_fill_rect_ink_count();
     test_png_writer_roundtrip();
 
     if (failures) {
