@@ -1,0 +1,9 @@
+Render Harness Sample
+=====================
+
+This is line-wrapped ASCII content to exercise draw_wrapped_line with a deliberately long sentence that should exceed the viewport width and wrap onto the next line cleanly.
+
+中文渲染测试：这一行用来验证 FreeType 字体在主机端的渲染结果，包括标点、换行与字宽计算。
+
+1234567890 !@#$%^&*()
+End of sample.
