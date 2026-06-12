@@ -82,6 +82,23 @@ open harness/out/render.png
 `ctest --test-dir harness/build` 并查看输出 PNG 验证效果。
 详见 `harness/README.md`。
 
+**渲染代码位置约束**：`main.c` 只负责系统初始化与任务编排（FreeRTOS 任务、
+按键、SD 挂载），不得直接出现渲染调用——包括 `epd_draw_*`、`epd_write_*`、
+`epd_fill_*`、`epd_hl_*`、`viewport_*`、`display_font_draw_text` 以及
+`epd_init`/`epd_set_rotation` 等显示初始化。渲染的初始化、绘制与上屏必须
+通过 `display_screen.h` 的共享入口完成：
+
+- `display_render_init()`：显示栈初始化（epd_init、VCOM、旋转、viewport），
+  返回 highlevel state。
+- `display_draw_sd_screen()` 等绘制函数：所有画面绘制。
+- `display_present()`：上电、刷屏、断电（harness 上的语义是写出 PNG）。
+
+新增渲染逻辑必须写在 harness 共同编译的共享文件里（`display_*.c`、
+`text_utils.c` 或新的共享模块，并同步加入 `harness/CMakeLists.txt`），
+否则它不会被 harness 覆盖，电脑上的渲染结果将不再等于设备结果。
+harness 入口 `harness/src/harness_main.c` 与 `main.c` 必须调用相同的
+共享入口，不要在两边各自复刻渲染流程。
+
 ## 四边遮挡与 viewport
 
 这个电子纸屏幕可能会放入相框，屏幕四边可能被遮挡不同长度。应用代码使用 viewport 抽象处理这个问题。

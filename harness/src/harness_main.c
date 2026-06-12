@@ -13,7 +13,6 @@
 #include "app_config.h"
 #include "display_font.h"
 #include "display_screen.h"
-#include "display_viewport.h"
 #include "sd_content.h"
 
 #include "epd_stub.h"
@@ -160,23 +159,8 @@ int main(int argc, char **argv) {
     epd_stub_set_output_path(out_path);
     ensure_parent_dir(out_path);
 
-    // Same init sequence as main.c on the device.
-    epd_init(&DISPLAY_BOARD, &DISPLAY_MODEL, EPD_LUT_64K);
-    epd_set_vcom(DISPLAY_VCOM_MV);
-    epd_set_rotation(EPD_ROT_PORTRAIT);
-    viewport_init();
-
-    EpdiyHighlevelState hl = epd_hl_init(EPD_BUILTIN_WAVEFORM);
-
-    printf(
-        "display: %dx%d, viewport: %dx%d at %d,%d\n",
-        epd_rotated_display_width(),
-        epd_rotated_display_height(),
-        viewport_width(),
-        viewport_height(),
-        viewport_screen_x(0),
-        viewport_screen_y(0)
-    );
+    // Same shared render entry as main.c on the device.
+    EpdiyHighlevelState hl = display_render_init();
 
     static SdDisplayContent content;
     load_text_content(&content, sdcard_dir);
@@ -198,9 +182,7 @@ int main(int argc, char **argv) {
     display_clear_screen();
     display_draw_sd_screen(&hl, &content, font_loaded ? &font : NULL);
 
-    epd_poweron();
-    enum EpdDrawError err = epd_hl_update_screen(&hl, MODE_GC16, (int)epd_ambient_temperature());
-    epd_poweroff();
+    enum EpdDrawError err = display_present(&hl);
 
     if (font_loaded) {
         display_font_deinit(&font);

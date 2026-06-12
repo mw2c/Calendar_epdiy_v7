@@ -9,7 +9,6 @@
 #include "app_config.h"
 #include "button_input.h"
 #include "display_screen.h"
-#include "display_viewport.h"
 #include "display_font.h"
 #include "sd_content.h"
 
@@ -69,23 +68,7 @@ static void unload_sd_font(void) {
 void app_main(void) {
     xTaskCreate(button_log_task, "button_log", 3072, NULL, 5, NULL);
 
-    epd_init(&DISPLAY_BOARD, &DISPLAY_MODEL, EPD_LUT_64K);
-    epd_set_vcom(DISPLAY_VCOM_MV);
-    epd_set_rotation(EPD_ROT_PORTRAIT);
-    viewport_init();
-
-    EpdiyHighlevelState hl = epd_hl_init(EPD_BUILTIN_WAVEFORM);
-
-    ESP_LOGI(
-        TAG,
-        "display initialized: %dx%d, viewport: %dx%d at %d,%d",
-        epd_rotated_display_width(),
-        epd_rotated_display_height(),
-        viewport_width(),
-        viewport_height(),
-        viewport_screen_x(0),
-        viewport_screen_y(0)
-    );
+    EpdiyHighlevelState hl = display_render_init();
 
     display_clear_screen();
 
@@ -101,9 +84,7 @@ void app_main(void) {
 
     display_draw_sd_screen(&hl, &s_sd_content, font_loaded ? &s_display_font : NULL);
 
-    epd_poweron();
-    enum EpdDrawError err = epd_hl_update_screen(&hl, MODE_GC16, (int)epd_ambient_temperature());
-    epd_poweroff();
+    enum EpdDrawError err = display_present(&hl);
 
     if (err != EPD_DRAW_SUCCESS) {
         ESP_LOGE(TAG, "draw error: %d", err);

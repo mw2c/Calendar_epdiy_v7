@@ -181,6 +181,34 @@ static void draw_font_test_line(
     *cursor_y += 4;
 }
 
+EpdiyHighlevelState display_render_init(void) {
+    epd_init(&DISPLAY_BOARD, &DISPLAY_MODEL, EPD_LUT_64K);
+    epd_set_vcom(DISPLAY_VCOM_MV);
+    epd_set_rotation(EPD_ROT_PORTRAIT);
+    viewport_init();
+
+    EpdiyHighlevelState hl = epd_hl_init(EPD_BUILTIN_WAVEFORM);
+
+    ESP_LOGI(
+        TAG,
+        "display initialized: %dx%d, viewport: %dx%d at %d,%d",
+        epd_rotated_display_width(),
+        epd_rotated_display_height(),
+        viewport_width(),
+        viewport_height(),
+        viewport_screen_x(0),
+        viewport_screen_y(0)
+    );
+    return hl;
+}
+
+enum EpdDrawError display_present(EpdiyHighlevelState *hl) {
+    epd_poweron();
+    enum EpdDrawError err = epd_hl_update_screen(hl, MODE_GC16, (int)epd_ambient_temperature());
+    epd_poweroff();
+    return err;
+}
+
 void display_clear_screen(void) {
     ESP_LOGI(TAG, "clearing display before first draw");
 
