@@ -10,10 +10,23 @@ find_package(ZLIB REQUIRED)
 
 enable_testing()
 
+# Real epdiy rendering sources, compiled unchanged (drawing logic is pure
+# software; the hardware layer they call into is stubbed in epd_stub.c).
+set(EPDIY_RENDER_SOURCES
+    ${REPO_ROOT}/components/epdiy2/src/epdiy.c
+    ${REPO_ROOT}/components/epdiy2/src/font.c
+    ${REPO_ROOT}/components/epdiy2/src/displays.c
+    ${REPO_ROOT}/components/epdiy2/src/builtin_waveforms.c
+)
+# Third-party driver code: keep our warning flags scoped to harness sources.
+set_source_files_properties(${EPDIY_RENDER_SOURCES} PROPERTIES COMPILE_OPTIONS "-w")
+
 add_executable(harness_tests
     tests/harness_tests.c
     src/png_writer.c
     src/epd_stub.c
+    src/miniz_shim.c
+    ${EPDIY_RENDER_SOURCES}
 )
 target_include_directories(harness_tests PRIVATE
     src
@@ -29,6 +42,8 @@ add_executable(render_harness
     src/harness_main.c
     src/epd_stub.c
     src/png_writer.c
+    src/miniz_shim.c
+    ${EPDIY_RENDER_SOURCES}
     ${REPO_ROOT}/main/display_screen.c
     ${REPO_ROOT}/main/display_viewport.c
     ${REPO_ROOT}/main/display_font.c

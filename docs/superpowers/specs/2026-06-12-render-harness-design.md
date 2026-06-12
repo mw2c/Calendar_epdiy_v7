@@ -1,7 +1,7 @@
 # 渲染验证 Harness 设计
 
 日期：2026-06-12
-状态：已批准（方案：纯替身 stub）
+状态：已实现；同日修订为"共享 epdiy 源码"方案（见文末修订记录）
 
 ## 目标
 
@@ -96,4 +96,23 @@ harness/
 
 - 不做 CLI 级遮挡参数（`DISPLAY_OCCLUDE_*` 保持编译期宏，与设备一致）。
 - 不模拟电子纸波形/灰度残影，输出为理想灰度。
-- 不编译 epdiy 源码，不引入 miniz。
+- ~~不编译 epdiy 源码，不引入 miniz~~（已被修订推翻，见下）。
+
+## 修订记录（2026-06-12，纯替身 stub 实现完成后）
+
+用户要求消除 harness 与设备之间的最后一份重复代码（epd_stub.c 中约 450 行
+对照移植的 epdiy 绘图逻辑），改为**共享 epdiy 源码**方案：
+
+- harness 直接编译真实的 `epdiy.c`、`font.c`、`displays.c`、
+  `builtin_waveforms.c`（绘图部分本就是纯软件）。
+- `epd_stub.c` 缩为纯硬件边界（~200 行）：板级注册
+  （`epd_set_board`/`epd_current_board`/`epd_ctrl_state`）、渲染层 no-op
+  （`epd_renderer_init/deinit`、`epd_clear_area`、`epd_draw_base`、
+  `epd_lcd_set_pixel_clock_MHz`）、no-op 板级定义 `epd_board_epdiy2_s3`、
+  `epd_hl_*` 与 PNG 导出。
+- 新增 shim：`sdkconfig.h`（定义 `CONFIG_IDF_TARGET_ESP32S3` 供
+  render_method.h 选择 LCD 路径）、`esp_assert.h`、`esp_types.h`、
+  `esp_idf_version.h`、`miniz.h` + `miniz_shim.c`（tinfl 接口转系统 zlib；
+  头文件刻意不 include zlib.h，避免与 font.c 内部 static `uncompress` 冲突）。
+- 切换前后渲染输出 PNG **逐字节一致**，单元测试改为直接验证真驱动代码。
+- 主项目与 epdiy 源码零修改（epdiy 只被编译，不被改动）。

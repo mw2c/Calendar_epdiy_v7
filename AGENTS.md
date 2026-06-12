@@ -67,6 +67,21 @@ components/network/
 
 不要把应用代码放进 `components/epdiy2/src/`。除非任务明确要求修补驱动，否则把 `components/epdiy2/` 视为第三方驱动代码。
 
+## 渲染验证 Harness
+
+`harness/` 是独立的主机端 CMake 项目，无需烧录即可在电脑上渲染出图：
+
+```sh
+./harness/run.sh
+open harness/out/render.png
+```
+
+它和设备构建编译**同一套**渲染源文件（`main/` 渲染模块 + epdiy 的
+`epdiy.c`/`font.c`/`displays.c`/`builtin_waveforms.c`），只 stub 硬件层。
+修改渲染、viewport、字体相关代码后，除了 `idf.py build`，也应运行
+`ctest --test-dir harness/build` 并查看输出 PNG 验证效果。
+详见 `harness/README.md`。
+
 ## 四边遮挡与 viewport
 
 这个电子纸屏幕可能会放入相框，屏幕四边可能被遮挡不同长度。应用代码使用 viewport 抽象处理这个问题。

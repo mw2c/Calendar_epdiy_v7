@@ -37,13 +37,19 @@ open harness/out/render.png
 
 ## 工作原理
 
-- 应用渲染源码原样编译，include 真实的 `components/epdiy2/src/epdiy.h`，
-  接口签名与设备 100% 一致
-- epdiy 驱动由 `src/epd_stub.c` 替身实现：4bpp framebuffer 布局、
-  旋转变换、glyph 解压绘制均对照 epdiy 源码移植（解压用系统 zlib）
-- `src/esp_shim/` 提供假 ESP-IDF 头文件（日志转 stderr、heap_caps 转 malloc）
-- `epd_hl_update_screen()` 在主机上的语义是把 framebuffer 按
-  `EPD_ROT_PORTRAIT` 方向导出为 1072x1448 灰度 PNG
+设备和 harness 编译**同一套源文件**，没有渲染逻辑的拷贝：
+
+- 应用渲染源码（`main/display_screen.c` 等）原样编译，include 真实的
+  `components/epdiy2/src/epdiy.h`
+- epdiy 渲染源码也原样编译：`epdiy.c`（旋转、像素/矩形）、`font.c`
+  （glyph 解压与文字绘制）、`displays.c`、`builtin_waveforms.c`
+- `src/epd_stub.c` 只 stub 硬件边界：板级/渲染层函数 no-op
+  （`epd_renderer_init`、`epd_draw_base`、`epd_clear_area` 等），
+  并实现 `epd_hl_*`——`epd_hl_update_screen()` 在主机上的语义是把
+  framebuffer 按 `EPD_ROT_PORTRAIT` 方向导出为 1072x1448 灰度 PNG
+- `src/esp_shim/` 提供假 ESP-IDF 头文件（日志转 stderr、heap_caps 转
+  malloc）；`miniz.h` + `src/miniz_shim.c` 把 font.c 用的 tinfl 解压接口
+  转到系统 zlib
 
 ## 测试
 
