@@ -28,11 +28,11 @@ harness/
   src/
     harness_main.c      # 复刻 main.c 绘制流程的主机入口
     epd_stub.c          # epd_* / epd_hl_* 替身实现
-    png_writer.c/.h     # 4bpp framebuffer -> PNG
-    stb_image_write.h   # vendored 单头文件 PNG 编码器
+    png_writer.c/.h     # 4bpp framebuffer -> PNG（zlib 手写最小编码器）
     esp_shim/           # 假 ESP-IDF 头文件
-      esp_log.h esp_heap_caps.h esp_memory_utils.h
-      esp_attr.h esp_assert.h driver/gpio.h
+      esp_log.h esp_heap_caps.h esp_memory_utils.h esp_err.h
+      esp_attr.h sdmmc_cmd.h driver/gpio.h driver/i2c_master.h
+      xtensa/core-macros.h
   assets/sdcard/        # 模拟 SD 卡：content.txt + fonts/*.ttf（字体不入库）
   out/                  # 渲染输出（gitignore）
 ```
@@ -57,6 +57,8 @@ harness/
   对照 `font.c` 移植。
 - `epd_hl_update_screen()`：主机语义 = 按当前旋转方向把 framebuffer 导出为
   PNG（PORTRAIT 下输出 1072x1448），灰度 4bpp 扩展为 8bpp。
+  PNG 编码用系统 zlib 手写最小 writer（glyph 解压本就依赖 zlib，
+  不再 vendor stb_image_write）。
 - 硬件相关函数（`epd_poweron/poweroff/clear/ambient_temperature` 等）为 no-op
   或返回固定值（温度 25C）。
 
