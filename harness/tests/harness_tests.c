@@ -9,6 +9,9 @@
 #include "epd_stub.h"
 #include "png_writer.h"
 
+// Font data arrays are defined in the header; include it in this binary only.
+#include "firasans_12.h"
+
 static int failures = 0;
 
 #define CHECK(cond)                                                          \
@@ -76,6 +79,44 @@ static void test_fill_rect_ink_count(void) {
     free(fb);
 }
 
+static void test_text_bounds(void) {
+    EpdFontProperties props = epd_font_properties_default();
+    int x = 50;
+    int y = 100;
+    int x1 = 0;
+    int y1 = 0;
+    int w = 0;
+    int h = 0;
+    epd_get_text_bounds(&FiraSans_12, "Hello", &x, &y, &x1, &y1, &w, &h, &props);
+    CHECK(w > 0);
+    CHECK(h > 0);
+}
+
+static void test_write_string_draws_ink(void) {
+    uint8_t *fb = alloc_white_fb();
+    if (fb == NULL) {
+        return;
+    }
+    EpdFontProperties props = epd_font_properties_default();
+    int x = 50;
+    int y = 100;
+    enum EpdDrawError err = epd_write_string(&FiraSans_12, "Ag", &x, &y, fb, &props);
+    CHECK(err == EPD_DRAW_SUCCESS);
+    CHECK(x > 50);
+    CHECK(count_ink_nibbles(fb) > 0);
+    free(fb);
+}
+
+static void test_highlevel_framebuffer(void) {
+    EpdiyHighlevelState hl = epd_hl_init(EPD_BUILTIN_WAVEFORM);
+    uint8_t *fb = epd_hl_get_framebuffer(&hl);
+    CHECK(fb != NULL);
+    epd_draw_pixel(0, 0, 0x00, fb);
+    epd_hl_set_all_white(&hl);
+    CHECK(fb[723] == 0xFF);
+    free(hl.front_fb);
+}
+
 static void test_png_writer_roundtrip(void) {
     const char *path = "harness_test_out.png";
     uint8_t pixels[4 * 2] = { 0, 85, 170, 255, 255, 170, 85, 0 };
@@ -108,6 +149,9 @@ int main(void) {
     test_display_geometry();
     test_portrait_pixel_mapping();
     test_fill_rect_ink_count();
+    test_text_bounds();
+    test_write_string_draws_ink();
+    test_highlevel_framebuffer();
     test_png_writer_roundtrip();
 
     if (failures) {
